@@ -13,14 +13,15 @@ function main() {
 	});
 
 	document.getElementById("shareLink").addEventListener("click", () => {
-		var copyFrom = document.createElement("textarea");
-		copyFrom.textContent =
+		const shareUrl =
 			"https://chrome.google.com/webstore/detail/geckodm/pgkfjobhhfckamidemkddfnnkknomobe";
-		document.body.appendChild(copyFrom);
-		copyFrom.select();
-		document.execCommand("copy");
-		copyFrom.blur();
-		document.body.removeChild(copyFrom);
+		
+		// Use modern Clipboard API instead of deprecated execCommand
+		navigator.clipboard.writeText(shareUrl).then(() => {
+			console.log("Share link copied to clipboard");
+		}).catch((err) => {
+			console.error("Failed to copy share link:", err);
+		});
 	});
 
 	document.getElementById("sourceCode").addEventListener("click", () => {
