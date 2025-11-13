@@ -60,39 +60,59 @@ function main() {
 
     // executing background.js to populate the select form
     chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+        if (!tabs || tabs.length === 0) {
+            console.error("No active tabs found");
+            return;
+        }
+        
         chrome.scripting.executeScript(
             {
                 target: { tabId: tabs[0].id },
                 files: ["./src/background.js"]
             },
             results => {
+                console.log("Script execution results:", results);
                 try {
                     const resourceSelector = document.getElementById(
                         "resourceSelector"
                     );
+                    
                     if (!results || results.length === 0) {
-                        console.log("No results from script execution");
+                        console.error("No results from script execution");
+                        resourceSelector.innerHTML = "<option>Error: Could not read page content</option>";
                         return;
                     }
+                    
                     const resources = results[0].result;
+                    console.log("Resources received:", resources);
+                    
                     if (!resources) {
-                        console.log("No resources returned");
+                        console.error("No resources returned from script");
+                        resourceSelector.innerHTML = "<option>No files found on this page</option>";
                         return;
                     }
+                    
+                    if (resources.length === 0) {
+                        console.warn("No resources found");
+                        resourceSelector.innerHTML = "<option>No files found on this page</option>";
+                        return;
+                    }
+                    
                     resourcesList = [...resources];
-                    console.log(resources);
+                    console.log("Populating selector with", resources.length, "resources");
+                    
                     resources.forEach((resource, index) => {
                         const resourceOption = document.createElement("option");
-
-                        // creating option element such that the text will be
-                        // the resource name and the option value its index in the array.
                         resourceOption.value = index.toString();
                         resourceOption.title = resource.name;
                         resourceOption.innerHTML = resource.name;
                         resourceSelector.appendChild(resourceOption);
                     });
+                    
+                    console.log("Selector populated successfully");
                 } catch (error) {
-                    console.log(error);
+                    console.error("Error in script callback:", error);
+                    document.getElementById("resourceSelector").innerHTML = "<option>Error: " + error.message + "</option>";
                 }
             }
         );
