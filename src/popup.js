@@ -170,6 +170,7 @@ let organizeChecked = false;
 let replaceFilename = false;
 
 function sanitiseFilename(filename) {
+    // Remove problematic characters for all languages (including Hebrew)
     return filename.replace(/[\\/:*?"<>|]/g, "-");
 }
 
