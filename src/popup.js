@@ -59,27 +59,43 @@ function main() {
     });
 
     // executing background.js to populate the select form
-    chrome.tabs.executeScript({ file: "./src/background.js" }, result => {
-        try {
-            const resourceSelector = document.getElementById(
-                "resourceSelector"
-            );
-            const resources = result[0];
-            resourcesList = [...resources];
-            console.log(result);
-            resources.forEach((resource, index) => {
-                const resourceOption = document.createElement("option");
+    chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+        chrome.scripting.executeScript(
+            {
+                target: { tabId: tabs[0].id },
+                files: ["./src/background.js"]
+            },
+            results => {
+                try {
+                    const resourceSelector = document.getElementById(
+                        "resourceSelector"
+                    );
+                    if (!results || results.length === 0) {
+                        console.log("No results from script execution");
+                        return;
+                    }
+                    const resources = results[0].result;
+                    if (!resources) {
+                        console.log("No resources returned");
+                        return;
+                    }
+                    resourcesList = [...resources];
+                    console.log(resources);
+                    resources.forEach((resource, index) => {
+                        const resourceOption = document.createElement("option");
 
-                // creating option element such that the text will be
-                // the resource name and the option value its index in the array.
-                resourceOption.value = index.toString();
-                resourceOption.title = resource.name;
-                resourceOption.innerHTML = resource.name;
-                resourceSelector.appendChild(resourceOption);
-            });
-        } catch (error) {
-            console.log(error);
-        }
+                        // creating option element such that the text will be
+                        // the resource name and the option value its index in the array.
+                        resourceOption.value = index.toString();
+                        resourceOption.title = resource.name;
+                        resourceOption.innerHTML = resource.name;
+                        resourceSelector.appendChild(resourceOption);
+                    });
+                } catch (error) {
+                    console.log(error);
+                }
+            }
+        );
     });
     initStorage();
 }

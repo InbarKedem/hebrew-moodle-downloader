@@ -141,4 +141,5 @@ function getFiles() {
 	return allFiles;
 }
 
+// Return the files for the extension to use
 getFiles();
