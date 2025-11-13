@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Moodle Page Diagnostic Tool</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #333;
+        }
+        .diagnostic-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: #fafafa;
+        }
+        .diagnostic-section h3 {
+            margin-top: 0;
+            color: #2196F3;
+        }
+        .result {
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .success {
+            color: #2e7d32;
+            background: #c8e6c9;
+        }
+        .error {
+            color: #c62828;
+            background: #ffcdd2;
+        }
+        .warning {
+            color: #f57f17;
+            background: #fff3e0;
+        }
+        button {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #1976D2;
+        }
+        .code {
+            background: #263238;
+            color: #aed581;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Moodle Page Diagnostic Tool</h1>
+        <p>Run this page on your Moodle course page to diagnose the page structure</p>
+        
+        <button onclick="runAllDiagnostics()">Run All Diagnostics</button>
+        <button onclick="clearResults()">Clear Results</button>
+
+        <div id="diagnostics"></div>
+    </div>
+
+    <script>
+        function clearResults() {
+            document.getElementById('diagnostics').innerHTML = '';
+        }
+
+        function addResult(title, code, result, status = 'info') {
+            const html = `
+                <div class="diagnostic-section">
+                    <h3>${title}</h3>
+                    <div class="code">$ ${code}</div>
+                    <div class="result ${status}">
+                        ${JSON.stringify(result, null, 2)}
+                    </div>
+                </div>
+            `;
+            document.getElementById('diagnostics').innerHTML += html;
+        }
+
+        function runAllDiagnostics() {
+            clearResults();
+            
+            // Test 1: Check for content divs
+            try {
+                const contentDivs = document.querySelectorAll('div[class*="content"]');
+                addResult(
+                    'Test 1: Find all divs with "content" in class',
+                    'document.querySelectorAll(\'div[class*="content"]\').length',
+                    {
+                        count: contentDivs.length,
+                        elements: Array.from(contentDivs).map(el => ({
+                            class: el.className,
+                            id: el.id,
+                            children: el.children.length,
+                            textPreview: el.textContent.substring(0, 100)
+                        }))
+                    },
+                    contentDivs.length > 0 ? 'success' : 'warning'
+                );
+            } catch (e) {
+                addResult('Test 1: Content divs', 'Error', e.message, 'error');
+            }
+
+            // Test 2: Check for activity elements
+            try {
+                const activities = document.querySelectorAll('[class*="activity"]');
+                addResult(
+                    'Test 2: Find resource lists with "activity" class',
+                    'document.querySelectorAll(\'[class*="activity"]\').length',
+                    {
+                        count: activities.length,
+                        elements: Array.from(activities).slice(0, 5).map(el => ({
+                            tag: el.tagName,
+                            class: el.className,
+                            id: el.id,
+                            textPreview: el.textContent.substring(0, 100)
+                        }))
+                    },
+                    activities.length > 0 ? 'success' : 'warning'
+                );
+            } catch (e) {
+                addResult('Test 2: Activity elements', 'Error', e.message, 'error');
+            }
+
+            // Test 3: Check for resource links
+            try {
+                const resourceLinks = document.querySelectorAll('a[href*="mod/"]');
+                addResult(
+                    'Test 3: Find all clickable resource links',
+                    'document.querySelectorAll(\'a[href*="mod/"]\').length',
+                    {
+                        count: resourceLinks.length,
+                        elements: Array.from(resourceLinks).slice(0, 5).map(el => ({
+                            href: el.href,
+                            text: el.textContent,
+                            parent: el.parentElement?.className
+                        }))
+                    },
+                    resourceLinks.length > 0 ? 'success' : 'warning'
+                );
+            } catch (e) {
+                addResult('Test 3: Resource links', 'Error', e.message, 'error');
+            }
+
+            // Test 4: Check for logout button (needed for session key)
+            try {
+                const logoutBtn = document.querySelector('a[href*="login/logout.php"]');
+                addResult(
+                    'Test 4: Find logout button (for session key)',
+                    'document.querySelector(\'a[href*="login/logout.php"]\').href',
+                    {
+                        found: logoutBtn ? true : false,
+                        href: logoutBtn ? logoutBtn.href : 'NOT FOUND',
+                        text: logoutBtn ? logoutBtn.textContent : 'N/A'
+                    },
+                    logoutBtn ? 'success' : 'error'
+                );
+            } catch (e) {
+                addResult('Test 4: Logout button', 'Error', e.message, 'error');
+            }
+
+            // Test 5: Check for course name
+            try {
+                const h1 = document.querySelector('h1');
+                const headerTitle = document.querySelector('.header-title');
+                addResult(
+                    'Test 5: Find course name',
+                    'Course name detection',
+                    {
+                        h1: h1 ? h1.textContent : 'NOT FOUND',
+                        headerTitle: headerTitle ? headerTitle.textContent : 'NOT FOUND',
+                        pageHeader: document.querySelector('header#page-header .header-title')?.textContent || 'NOT FOUND'
+                    },
+                    (h1 || headerTitle) ? 'success' : 'warning'
+                );
+            } catch (e) {
+                addResult('Test 5: Course name', 'Error', e.message, 'error');
+            }
+
+            // Test 6: Check for section names
+            try {
+                const sectionNames = document.querySelectorAll('h3.sectionname');
+                addResult(
+                    'Test 6: Find section names',
+                    'document.querySelectorAll(\'h3.sectionname\').length',
+                    {
+                        count: sectionNames.length,
+                        sections: Array.from(sectionNames).slice(0, 5).map(el => ({
+                            text: el.textContent,
+                            parent: el.parentElement?.className
+                        }))
+                    },
+                    sectionNames.length > 0 ? 'success' : 'warning'
+                );
+            } catch (e) {
+                addResult('Test 6: Section names', 'Error', e.message, 'error');
+            }
+
+            // Test 7: Check instancename elements
+            try {
+                const instanceNames = document.querySelectorAll('.instancename');
+                addResult(
+                    'Test 7: Find .instancename elements',
+                    'document.querySelectorAll(\'.instancename\').length',
+                    {
+                        count: instanceNames.length,
+                        elements: Array.from(instanceNames).slice(0, 5).map(el => ({
+                            html: el.innerHTML.substring(0, 150),
+                            children: el.children.length,
+                            childrenInfo: Array.from(el.children).map(child => ({
+                                tag: child.tagName,
+                                class: child.className,
+                                text: child.textContent.substring(0, 50)
+                            }))
+                        }))
+                    },
+                    instanceNames.length > 0 ? 'success' : 'warning'
+                );
+            } catch (e) {
+                addResult('Test 7: Instancename elements', 'Error', e.message, 'error');
+            }
+
+            // Test 8: Check for main content area
+            try {
+                const mainContent = document.querySelector('div[role="main"]');
+                addResult(
+                    'Test 8: Find main content area',
+                    'document.querySelector(\'div[role="main"]\').className',
+                    {
+                        found: mainContent ? true : false,
+                        class: mainContent ? mainContent.className : 'NOT FOUND',
+                        children: mainContent ? mainContent.children.length : 0
+                    },
+                    mainContent ? 'success' : 'warning'
+                );
+            } catch (e) {
+                addResult('Test 8: Main content area', 'Error', e.message, 'error');
+            }
+
+            // Test 9: Full page structure summary
+            try {
+                addResult(
+                    'Test 9: Page Structure Summary',
+                    'Full diagnosis',
+                    {
+                        pageTitle: document.title,
+                        url: window.location.href,
+                        mainClasses: document.body.className,
+                        contentDivCount: document.querySelectorAll('div[class*="content"]').length,
+                        activityCount: document.querySelectorAll('[class*="activity"]').length,
+                        linkCount: document.querySelectorAll('a[href*="mod/"]').length,
+                        hasLogout: document.querySelector('a[href*="login/logout.php"]') ? true : false,
+                        hasSectionNames: document.querySelectorAll('h3.sectionname').length > 0
+                    },
+                    'info'
+                );
+            } catch (e) {
+                addResult('Test 9: Summary', 'Error', e.message, 'error');
+            }
+        }
+
+        // Auto-run on load
+        window.addEventListener('load', () => {
+            console.log('Diagnostic tool loaded. Click "Run All Diagnostics" to start.');
+        });
+    </script>
+</body>
+</html>

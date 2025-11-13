@@ -49,16 +49,48 @@ var SUPPORTED_FILES = new Set([
 ]);
 
 function getFilesUnderSection(sesskey) {
-	return Array.from(document.getElementsByClassName("content"))
+	// Support both old format (.content) and new TAU Moodle format (.section)
+	const contentSelectors = [
+		document.querySelectorAll(".content"),
+		document.querySelectorAll(".section")
+	];
+	
+	let contents = [];
+	for (let selector of contentSelectors) {
+		if (selector.length > 0) {
+			contents = Array.from(selector);
+			console.log("Found", contents.length, "sections using selector");
+			break;
+		}
+	}
+	
+	if (contents.length === 0) {
+		console.warn("No content sections found with either .content or .section");
+		return [];
+	}
+	
+	return contents
 		.map(content => {
-			const sectionEl = content.querySelector("h3.sectionname");
+			// Try multiple selectors for section name
+			let sectionEl = content.querySelector("h3.sectionname");
+			if (!sectionEl) sectionEl = content.querySelector("h3");
+			if (!sectionEl) sectionEl = content.querySelector("[class*='section-title']");
+			
 			if (!sectionEl) return [];
+			
 			const section = sectionEl.textContent.trim();
-			return Array.from(content.getElementsByClassName("activity"))
+			
+			// Get activities - try multiple selectors
+			let activities = Array.from(content.querySelectorAll(".activity"));
+			if (activities.length === 0) {
+				activities = Array.from(content.querySelectorAll("[class*='activity']"));
+			}
+			
+			console.log("Section:", section, "Activities:", activities.length);
+			
+			return activities
 				.map(activity => ({
-					instanceName: activity.getElementsByClassName(
-						"instancename"
-					)[0],
+					instanceName: activity.getElementsByClassName("instancename")[0],
 					archorTag: activity.getElementsByTagName("a")[0]
 				}))
 				.filter(
@@ -145,15 +177,20 @@ function getFiles() {
 
 		console.log("Session key:", sesskey);
 
+		// Try to find resources in both old and new Moodle formats
 		const tableBody = document.querySelector(
 			"div[role='main'] > table.generaltable.mod_index > tbody"
 		);
-		console.log("Table body found:", tableBody !== null);
+		console.log("Table body found (old Resources tab):", tableBody !== null);
 
-		const allFiles =
-			tableBody === null
-				? getFilesUnderSection(sesskey)
-				: getFilesUnderResources(sesskey, tableBody);
+		let allFiles;
+		if (tableBody !== null) {
+			// Old format with Resources tab
+			allFiles = getFilesUnderResources(sesskey, tableBody);
+		} else {
+			// New format with course sections
+			allFiles = getFilesUnderSection(sesskey);
+		}
 		
 		allFiles.forEach(file => (file.course = courseName));
 		console.log("Total files found:", allFiles.length);
