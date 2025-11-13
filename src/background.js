@@ -9,7 +9,7 @@ function getDownloadOptions(sesskey, url) {
 		// Resources, URLs, Pages.
 		// URLs and Pages need to be handled in popup.js.
 		return {
-			url: url + "&redirect=1"
+			url: url + "&redirect=1",
 		};
 	}
 	const urlObj = new URL(url);
@@ -29,69 +29,95 @@ function getDownloadOptions(sesskey, url) {
 		headers: [
 			{
 				name: "content-type",
-				value: "application/x-www-form-urlencoded"
-			}
+				value: "application/x-www-form-urlencoded",
+			},
 		],
-		body: `id=${id}&sesskey=${sesskey}`
+		body: `id=${id}&sesskey=${sesskey}`,
 	};
 }
 
 // Supported file types in English and Hebrew
 var SUPPORTED_FILES = new Set([
-	"File",           // English: File
-	"Folder",         // English: Folder
-	"URL",            // English: URL
-	"Page",           // English: Page
-	"קובץ",           // Hebrew: File
-	"תיקייה",         // Hebrew: Folder
-	"כתובת אינטרנט",  // Hebrew: URL
-	"דף"              // Hebrew: Page
+	"File", // English: File
+	"Folder", // English: Folder
+	"URL", // English: URL
+	"Page", // English: Page
+	"קובץ", // Hebrew: File
+	"תיקייה", // Hebrew: Folder
+	"כתובת אינטרנט", // Hebrew: URL
+	"דף", // Hebrew: Page
 ]);
 
 function getFilesUnderSection(sesskey) {
-	// Support both old format (.content) and new TAU Moodle format (.section)
-	const contentSelectors = [
+	// Support multiple Moodle format selectors (old, new, TAU)
+	const selectorOptions = [
 		document.querySelectorAll(".content"),
-		document.querySelectorAll(".section")
+		document.querySelectorAll(".section"),
+		document.querySelectorAll("[class*='course-content'] li[class*='section']"),
+		document.querySelectorAll("li.section"),
+		document.querySelectorAll("[class*='section'][class*='main']"),
 	];
-	
+
 	let contents = [];
-	for (let selector of contentSelectors) {
+	for (let selector of selectorOptions) {
 		if (selector.length > 0) {
 			contents = Array.from(selector);
 			console.log("Found", contents.length, "sections using selector");
 			break;
 		}
 	}
-	
+
 	if (contents.length === 0) {
-		console.warn("No content sections found with either .content or .section");
+		console.warn(
+			"No content sections found with any selector"
+		);
 		return [];
 	}
-	
+
 	return contents
-		.map(content => {
+		.map((content) => {
 			// Try multiple selectors for section name
 			let sectionEl = content.querySelector("h3.sectionname");
 			if (!sectionEl) sectionEl = content.querySelector("h3");
-			if (!sectionEl) sectionEl = content.querySelector("[class*='section-title']");
-			
+			if (!sectionEl)
+				sectionEl = content.querySelector("[class*='section-title']");
+			if (!sectionEl)
+				sectionEl = content.querySelector(".sectionname");
+			if (!sectionEl)
+				sectionEl = content.querySelector("[class*='section'] > h3");
+
 			if (!sectionEl) return [];
-			
+
 			const section = sectionEl.textContent.trim();
-			
-			// Get activities - try multiple selectors
+
+			// Get activities - try multiple selectors for different Moodle versions
 			let activities = Array.from(content.querySelectorAll(".activity"));
 			if (activities.length === 0) {
-				activities = Array.from(content.querySelectorAll("[class*='activity']"));
+				activities = Array.from(
+					content.querySelectorAll("[class*='activity']")
+				);
 			}
-			
+			if (activities.length === 0) {
+				activities = Array.from(
+					content.querySelectorAll("li[class*='activity']")
+				);
+			}
+			if (activities.length === 0) {
+				activities = Array.from(
+					content.querySelectorAll("div.mod")
+				);
+			}
+
 			console.log("Section:", section, "Activities:", activities.length);
-			
+
 			return activities
-				.map(activity => ({
-					instanceName: activity.getElementsByClassName("instancename")[0],
-					archorTag: activity.getElementsByTagName("a")[0]
+				.map((activity) => ({
+					instanceName:
+						activity.getElementsByClassName("instancename")[0] ||
+						activity.querySelector(".activityname") ||
+						activity.querySelector("[class*='instancename']"),
+					archorTag: activity.getElementsByTagName("a")[0] ||
+						activity.querySelector("a[href*='mod/']"),
 				}))
 				.filter(
 					({ instanceName, archorTag }) =>
@@ -104,18 +130,18 @@ function getFilesUnderSection(sesskey) {
 						archorTag.href
 					),
 					type: instanceName.lastChild.textContent.trim(),
-					section: section
+					section: section,
 				}))
-				.filter(activity => SUPPORTED_FILES.has(activity.type));
+				.filter((activity) => SUPPORTED_FILES.has(activity.type));
 		})
 		.reduce((x, y) => x.concat(y), []);
 }
 
 function getFilesUnderResources(sesskey, tableBody) {
 	return Array.from(tableBody.children) // to get files under Resources tab
-		.filter(resource => resource.getElementsByTagName("img").length != 0)
+		.filter((resource) => resource.getElementsByTagName("img").length != 0)
 		.map(
-			resource =>
+			(resource) =>
 				(resource = {
 					name: resource
 						.getElementsByTagName("a")[0]
@@ -127,7 +153,7 @@ function getFilesUnderResources(sesskey, tableBody) {
 					type: resource.getElementsByTagName("img")[0]["alt"].trim(),
 					section: resource
 						.getElementsByTagName("td")[0]
-						.textContent.trim()
+						.textContent.trim(),
 				})
 		)
 		.map((resource, index, array) => {
@@ -137,24 +163,96 @@ function getFilesUnderResources(sesskey, tableBody) {
 				"";
 			return resource;
 		})
-		.filter(resource => SUPPORTED_FILES.has(resource.type));
+		.filter((resource) => SUPPORTED_FILES.has(resource.type));
+}
+
+function getFilesFromModernLayout(sesskey) {
+	// For modern Moodle 4.x layouts with different DOM structure
+	const files = [];
+	
+	// Try to find all elements that contain activity links
+	const allLinks = document.querySelectorAll("a[href*='/mod/']");
+	
+	allLinks.forEach((link) => {
+		try {
+			// Find parent activity container
+			let activityContainer = link.closest(".activity") || 
+									 link.closest("li[class*='activity']") ||
+									 link.closest("div[class*='activity']") ||
+									 link.closest(".mod") ||
+									 link.closest("li.mod");
+			
+			if (!activityContainer) return;
+			
+			// Find the activity name/type
+			let nameEl = activityContainer.querySelector(".instancename") ||
+						 activityContainer.querySelector(".activityname") ||
+						 activityContainer.querySelector("span.instancename") ||
+						 link.querySelector("span");
+			
+			if (!nameEl) return;
+			
+			const name = nameEl.textContent.trim();
+			
+			// Try to extract type from instancename structure
+			let type = "";
+			const instanceNameEl = activityContainer.querySelector(".instancename");
+			if (instanceNameEl) {
+				// The type is usually in a span after the link or as lastChild
+				const typeEl = instanceNameEl.querySelector("span") || instanceNameEl.lastChild;
+				type = typeEl ? typeEl.textContent.trim() : "";
+			}
+			
+			if (!type) {
+				// Try to find type from title or aria-label
+				type = link.getAttribute("title") || link.getAttribute("aria-label") || "";
+			}
+			
+			// Extract section name
+			let section = "";
+			let sectionContainer = activityContainer.closest("[class*='section']");
+			if (sectionContainer) {
+				let sectionNameEl = sectionContainer.querySelector("h3") ||
+									 sectionContainer.querySelector("h2") ||
+									 sectionContainer.querySelector("[class*='sectionname']");
+				section = sectionNameEl ? sectionNameEl.textContent.trim() : "";
+			}
+			
+			if (name && SUPPORTED_FILES.has(type)) {
+				files.push({
+					name: name,
+					downloadOptions: getDownloadOptions(sesskey, link.href),
+					type: type,
+					section: section,
+				});
+			}
+		} catch (e) {
+			console.log("Error processing activity:", e);
+		}
+	});
+	
+	return files;
 }
 
 function getFiles() {
 	try {
 		console.log("Starting getFiles()...");
-		
+
 		const h1s = document.getElementsByTagName("h1");
 		const headerTitles = document.getElementsByClassName("header-title");
-		const breadcrumbItems = document.getElementsByClassName("breadcrumb-item");
-		const pageHeader = document.querySelector("header#page-header .header-title")
+		const breadcrumbItems =
+			document.getElementsByClassName("breadcrumb-item");
+		const pageHeader = document.querySelector(
+			"header#page-header .header-title"
+		);
 		const courseName = (
-				h1s.length && h1s[0].innerText ||
-				headerTitles.length && headerTitles[0].innerText ||
-				pageHeader.textContent ||
-				breadcrumbItems.length > 2 && breadcrumbItems[2].firstElementChild.title ||
-				""
-			).trim();
+			(h1s.length && h1s[0].innerText) ||
+			(headerTitles.length && headerTitles[0].innerText) ||
+			pageHeader.textContent ||
+			(breadcrumbItems.length > 2 &&
+				breadcrumbItems[2].firstElementChild.title) ||
+			""
+		).trim();
 
 		console.log("Course name:", courseName);
 
@@ -164,11 +262,15 @@ function getFiles() {
 		// Note that var is used here as this script can be executed multiple times.
 		let sesskey = null;
 		try {
-			const logoutBtn = document.querySelector("a[href*='login/logout.php']");
+			const logoutBtn = document.querySelector(
+				"a[href*='login/logout.php']"
+			);
 			if (logoutBtn) {
 				sesskey = new URL(logoutBtn.href).searchParams.get("sesskey");
 			} else {
-				console.warn("Logout button not found, sesskey may be unavailable");
+				console.warn(
+					"Logout button not found, sesskey may be unavailable"
+				);
 			}
 		} catch (e) {
 			console.warn("Error getting sesskey:", e);
@@ -181,7 +283,10 @@ function getFiles() {
 		const tableBody = document.querySelector(
 			"div[role='main'] > table.generaltable.mod_index > tbody"
 		);
-		console.log("Table body found (old Resources tab):", tableBody !== null);
+		console.log(
+			"Table body found (old Resources tab):",
+			tableBody !== null
+		);
 
 		let allFiles;
 		if (tableBody !== null) {
@@ -191,11 +296,17 @@ function getFiles() {
 			// New format with course sections
 			allFiles = getFilesUnderSection(sesskey);
 		}
-		
-		allFiles.forEach(file => (file.course = courseName));
+
+		// If still no files found, try the modern layout fallback
+		if (allFiles.length === 0) {
+			console.log("No files found with standard selectors, trying modern layout approach...");
+			allFiles = getFilesFromModernLayout(sesskey);
+		}
+
+		allFiles.forEach((file) => (file.course = courseName));
 		console.log("Total files found:", allFiles.length);
 		console.log("Files:", allFiles);
-		
+
 		return allFiles;
 	} catch (error) {
 		console.error("Error in getFiles():", error);
