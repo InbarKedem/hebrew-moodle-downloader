@@ -36,7 +36,17 @@ function getDownloadOptions(sesskey, url) {
 	};
 }
 
-var SUPPORTED_FILES = new Set(["File", "Folder", "URL", "Page"]);
+// Supported file types in English and Hebrew
+var SUPPORTED_FILES = new Set([
+	"File", // English: File
+	"Folder", // English: Folder
+	"URL", // English: URL
+	"Page", // English: Page
+	"קובץ", // Hebrew: File
+	"תיקייה", // Hebrew: Folder
+	"כתובת אינטרנט", // Hebrew: URL
+	"דף", // Hebrew: Page
+]);
 
 function getFilesUnderSection(sesskey) {
 	return Array.from(document.getElementsByClassName("content"))
