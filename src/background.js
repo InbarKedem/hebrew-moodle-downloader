@@ -109,36 +109,39 @@ function getFilesUnderResources(sesskey, tableBody) {
 }
 
 function getFiles() {
-	const h1s = document.getElementsByTagName("h1");
-	const headerTitles = document.getElementsByClassName("header-title");
-	const breadcrumbItems = document.getElementsByClassName("breadcrumb-item");
-	const pageHeader = document.querySelector("header#page-header .header-title")
-	const courseName = (
-			h1s.length && h1s[0].innerText ||
-			headerTitles.length && headerTitles[0].innerText ||
-			pageHeader.textContent ||
-			breadcrumbItems.length > 2 && breadcrumbItems[2].firstElementChild.title ||
-			""
-		).trim();
+	try {
+		const h1s = document.getElementsByTagName("h1");
+		const headerTitles = document.getElementsByClassName("header-title");
+		const breadcrumbItems = document.getElementsByClassName("breadcrumb-item");
+		const pageHeader = document.querySelector("header#page-header .header-title")
+		const courseName = (
+				h1s.length && h1s[0].innerText ||
+				headerTitles.length && headerTitles[0].innerText ||
+				pageHeader.textContent ||
+				breadcrumbItems.length > 2 && breadcrumbItems[2].firstElementChild.title ||
+				""
+			).trim();
 
-	// The session key should normally be accessible through window.M.cfg.sesskey,
-	// but getting the window object is hard.
-	// Instead, we can grab the session key from the logout button.
-	// Note that var is used here as this script can be executed multiple times.
-	const sesskey = new URL(
-		document.querySelector("a[href*='login/logout.php']").href
-	).searchParams.get("sesskey");
+		// The session key should normally be accessible through window.M.cfg.sesskey,
+		// but getting the window object is hard.
+		// Instead, we can grab the session key from the logout button.
+		// Note that var is used here as this script can be executed multiple times.
+		const sesskey = new URL(
+			document.querySelector("a[href*='login/logout.php']").href
+		).searchParams.get("sesskey");
 
-	const tableBody = document.querySelector(
-		"div[role='main'] > table.generaltable.mod_index > tbody"
-	);
-	const allFiles =
-		tableBody === null
-			? getFilesUnderSection(sesskey)
-			: getFilesUnderResources(sesskey, tableBody);
-	allFiles.forEach(file => (file.course = courseName));
-	console.log(allFiles);
-	return allFiles;
+		const tableBody = document.querySelector(
+			"div[role='main'] > table.generaltable.mod_index > tbody"
+		);
+		const allFiles =
+			tableBody === null
+				? getFilesUnderSection(sesskey)
+				: getFilesUnderResources(sesskey, tableBody);
+		allFiles.forEach(file => (file.course = courseName));
+		console.log(allFiles);
+		return allFiles;
+	} catch (error) {
+		console.error("Error in getFiles():", error);
+		return [];
+	}
 }
-
-getFiles();
