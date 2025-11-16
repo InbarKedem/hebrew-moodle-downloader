@@ -59,27 +59,35 @@ function main() {
     });
 
     // executing background.js to populate the select form
-    chrome.tabs.executeScript({ file: "./src/background.js" }, result => {
-        try {
-            const resourceSelector = document.getElementById(
-                "resourceSelector"
-            );
-            const resources = result[0];
-            resourcesList = [...resources];
-            console.log(result);
-            resources.forEach((resource, index) => {
-                const resourceOption = document.createElement("option");
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        chrome.scripting.executeScript(
+            {
+                target: { tabId: tabs[0].id },
+                function: getFiles
+            },
+            (results) => {
+                try {
+                    const resourceSelector = document.getElementById(
+                        "resourceSelector"
+                    );
+                    const resources = results[0].result;
+                    resourcesList = [...resources];
+                    console.log(results);
+                    resources.forEach((resource, index) => {
+                        const resourceOption = document.createElement("option");
 
-                // creating option element such that the text will be
-                // the resource name and the option value its index in the array.
-                resourceOption.value = index.toString();
-                resourceOption.title = resource.name;
-                resourceOption.innerHTML = resource.name;
-                resourceSelector.appendChild(resourceOption);
-            });
-        } catch (error) {
-            console.log(error);
-        }
+                        // creating option element such that the text will be
+                        // the resource name and the option value its index in the array.
+                        resourceOption.value = index.toString();
+                        resourceOption.title = resource.name;
+                        resourceOption.innerHTML = resource.name;
+                        resourceSelector.appendChild(resourceOption);
+                    });
+                } catch (error) {
+                    console.log(error);
+                }
+            }
+        );
     });
     initStorage();
 }
@@ -295,6 +303,125 @@ function downloadResources() {
         eventAction: "downloadResources",
         eventValue: selectedOptions.length
     });
+}
+
+function getDownloadOptions(sesskey, url) {
+	if (!url.includes("folder")) {
+		return {
+			url: url + "&redirect=1"
+		};
+	}
+	const urlObj = new URL(url);
+	const id = urlObj.searchParams.get("id");
+	const downloadUrl =
+		urlObj.origin +
+		urlObj.pathname.slice(undefined, urlObj.pathname.lastIndexOf("/")) +
+		"/download_folder.php?id=" +
+		id;
+	return {
+		url: downloadUrl,
+		method: "POST",
+		headers: [
+			{
+				name: "content-type",
+				value: "application/x-www-form-urlencoded"
+			}
+		],
+		body: `id=${id}&sesskey=${sesskey}`
+	};
+}
+
+var SUPPORTED_FILES = new Set([
+	"File", "Folder", "URL", "Page",
+	"קובץ", "תיקייה", "כתובת אינטרנט", "דף"
+]);
+
+function getFilesUnderSection(sesskey) {
+	return Array.from(document.getElementsByClassName("content"))
+		.map(content => {
+			const sectionEl = content.querySelector("h3.sectionname");
+			if (!sectionEl) return [];
+			const section = sectionEl.textContent.trim();
+			return Array.from(content.getElementsByClassName("activity"))
+				.map(activity => ({
+					instanceName: activity.getElementsByClassName(
+						"instancename"
+					)[0],
+					archorTag: activity.getElementsByTagName("a")[0]
+				}))
+				.filter(
+					({ instanceName, archorTag }) =>
+						instanceName !== undefined && archorTag !== undefined
+				)
+				.map(({ instanceName, archorTag }) => ({
+					name: instanceName.firstChild.textContent.trim(),
+					downloadOptions: getDownloadOptions(
+						sesskey,
+						archorTag.href
+					),
+					type: instanceName.lastChild.textContent.trim(),
+					section: section
+				}))
+				.filter(activity => SUPPORTED_FILES.has(activity.type));
+		})
+		.reduce((x, y) => x.concat(y), []);
+}
+
+function getFilesUnderResources(sesskey, tableBody) {
+	return Array.from(tableBody.children)
+		.filter(resource => resource.getElementsByTagName("img").length != 0)
+		.map(
+			resource =>
+				(resource = {
+					name: resource
+						.getElementsByTagName("a")[0]
+						.textContent.trim(),
+					downloadOptions: getDownloadOptions(
+						sesskey,
+						resource.getElementsByTagName("a")[0].href
+					),
+					type: resource.getElementsByTagName("img")[0]["alt"].trim(),
+					section: resource
+						.getElementsByTagName("td")[0]
+						.textContent.trim()
+				})
+		)
+		.map((resource, index, array) => {
+			resource.section =
+				resource.section ||
+				(array[index - 1] && array[index - 1].section) ||
+				"";
+			return resource;
+		})
+		.filter(resource => SUPPORTED_FILES.has(resource.type));
+}
+
+function getFiles() {
+	const h1s = document.getElementsByTagName("h1");
+	const headerTitles = document.getElementsByClassName("header-title");
+	const breadcrumbItems = document.getElementsByClassName("breadcrumb-item");
+	const pageHeader = document.querySelector("header#page-header .header-title")
+	const courseName = (
+			h1s.length && h1s[0].innerText ||
+			headerTitles.length && headerTitles[0].innerText ||
+			pageHeader.textContent ||
+			breadcrumbItems.length > 2 && breadcrumbItems[2].firstElementChild.title ||
+			""
+		).trim();
+
+	const sesskey = new URL(
+		document.querySelector("a[href*='login/logout.php']").href
+	).searchParams.get("sesskey");
+
+	const tableBody = document.querySelector(
+		"div[role='main'] > table.generaltable.mod_index > tbody"
+	);
+	const allFiles =
+		tableBody === null
+			? getFilesUnderSection(sesskey)
+			: getFilesUnderResources(sesskey, tableBody);
+	allFiles.forEach(file => (file.course = courseName));
+	return allFiles;
 }
 
 document.addEventListener("DOMContentLoaded", () => {
