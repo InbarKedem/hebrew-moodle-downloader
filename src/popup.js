@@ -3,32 +3,9 @@
  * Copyright (c) 2018 Harsil Patel
  * https://github.com/harsilspatel/MoodleDownloader
  */
+let resourcesList = [];
+
 function main() {
-    // google analytics
-    (function(i, s, o, g, r, a, m) {
-        i["GoogleAnalyticsObject"] = r;
-        (i[r] =
-            i[r] ||
-            function() {
-                (i[r].q = i[r].q || []).push(arguments);
-            }),
-            (i[r].l = 1 * new Date());
-        (a = s.createElement(o)), (m = s.getElementsByTagName(o)[0]);
-        a.async = 1;
-        a.src = g;
-        m.parentNode.insertBefore(a, m);
-    })(
-        window,
-        document,
-        "script",
-        "https://www.google-analytics.com/analytics.js",
-        "ga"
-    );
-
-    ga("create", "UA-119398707-1", "auto");
-    ga("set", "checkProtocolTask", null);
-    ga("send", "pageview");
-
     // downloadResources on button press
     const button = document.getElementById("downloadResources");
     button.addEventListener("click", () => {
@@ -36,14 +13,17 @@ function main() {
     });
 
     document.getElementById("shareLink").addEventListener("click", () => {
-        var copyFrom = document.createElement("textarea");
-        copyFrom.textContent =
+        const shareUrl =
             "https://chrome.google.com/webstore/detail/geckodm/pgkfjobhhfckamidemkddfnnkknomobe";
-        document.body.appendChild(copyFrom);
-        copyFrom.select();
-        document.execCommand("copy");
-        copyFrom.blur();
-        document.body.removeChild(copyFrom);
+        // Use modern Clipboard API instead of deprecated execCommand
+        navigator.clipboard
+            .writeText(shareUrl)
+            .then(() => {
+                console.log("Share link copied to clipboard");
+            })
+            .catch((err) => {
+                console.error("Failed to copy share link:", err);
+            });
     });
 
     document.getElementById("sourceCode").addEventListener("click", () => {
@@ -60,31 +40,65 @@ function main() {
 
     // executing background.js to populate the select form
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (!tabs || tabs.length === 0) {
+            console.error("No active tabs found");
+            return;
+        }
+
         chrome.scripting.executeScript(
             {
                 target: { tabId: tabs[0].id },
-                function: getFiles
+                files: ["./src/background.js"]
             },
             (results) => {
+                console.log("Script execution results:", results);
                 try {
                     const resourceSelector = document.getElementById(
                         "resourceSelector"
                     );
+                    if (!results || results.length === 0) {
+                        console.error("No results from script execution");
+                        resourceSelector.innerHTML =
+                            "<option>Error: Could not read page content</option>";
+                        return;
+                    }
+
                     const resources = results[0].result;
+                    console.log("Resources received:", resources);
+                    if (!resources) {
+                        console.error("No resources returned from script");
+                        resourceSelector.innerHTML =
+                            "<option>No files found on this page</option>";
+                        return;
+                    }
+
+                    if (resources.length === 0) {
+                        console.warn("No resources found");
+                        resourceSelector.innerHTML =
+                            "<option>No files found on this page</option>";
+                        return;
+                    }
+
                     resourcesList = [...resources];
-                    console.log(results);
+                    console.log(
+                        "Populating selector with",
+                        resources.length,
+                        "resources"
+                    );
+
                     resources.forEach((resource, index) => {
                         const resourceOption = document.createElement("option");
-
-                        // creating option element such that the text will be
-                        // the resource name and the option value its index in the array.
                         resourceOption.value = index.toString();
                         resourceOption.title = resource.name;
                         resourceOption.innerHTML = resource.name;
                         resourceSelector.appendChild(resourceOption);
                     });
+
+                    console.log("Selector populated successfully");
                 } catch (error) {
-                    console.log(error);
+                    console.error("Error in script callback:", error);
+                    document.getElementById("resourceSelector").innerHTML =
+                        "<option>Error: " + error.message + "</option>";
                 }
             }
         );
@@ -297,131 +311,6 @@ function downloadResources() {
             }, index * INTERVAL);
         }
     });
-
-    ga("send", "event", {
-        eventCategory: "click",
-        eventAction: "downloadResources",
-        eventValue: selectedOptions.length
-    });
-}
-
-function getDownloadOptions(sesskey, url) {
-	if (!url.includes("folder")) {
-		return {
-			url: url + "&redirect=1"
-		};
-	}
-	const urlObj = new URL(url);
-	const id = urlObj.searchParams.get("id");
-	const downloadUrl =
-		urlObj.origin +
-		urlObj.pathname.slice(undefined, urlObj.pathname.lastIndexOf("/")) +
-		"/download_folder.php?id=" +
-		id;
-	return {
-		url: downloadUrl,
-		method: "POST",
-		headers: [
-			{
-				name: "content-type",
-				value: "application/x-www-form-urlencoded"
-			}
-		],
-		body: `id=${id}&sesskey=${sesskey}`
-	};
-}
-
-var SUPPORTED_FILES = new Set([
-	"File", "Folder", "URL", "Page",
-	"קובץ", "תיקייה", "כתובת אינטרנט", "דף"
-]);
-
-function getFilesUnderSection(sesskey) {
-	return Array.from(document.getElementsByClassName("content"))
-		.map(content => {
-			const sectionEl = content.querySelector("h3.sectionname");
-			if (!sectionEl) return [];
-			const section = sectionEl.textContent.trim();
-			return Array.from(content.getElementsByClassName("activity"))
-				.map(activity => ({
-					instanceName: activity.getElementsByClassName(
-						"instancename"
-					)[0],
-					archorTag: activity.getElementsByTagName("a")[0]
-				}))
-				.filter(
-					({ instanceName, archorTag }) =>
-						instanceName !== undefined && archorTag !== undefined
-				)
-				.map(({ instanceName, archorTag }) => ({
-					name: instanceName.firstChild.textContent.trim(),
-					downloadOptions: getDownloadOptions(
-						sesskey,
-						archorTag.href
-					),
-					type: instanceName.lastChild.textContent.trim(),
-					section: section
-				}))
-				.filter(activity => SUPPORTED_FILES.has(activity.type));
-		})
-		.reduce((x, y) => x.concat(y), []);
-}
-
-function getFilesUnderResources(sesskey, tableBody) {
-	return Array.from(tableBody.children)
-		.filter(resource => resource.getElementsByTagName("img").length != 0)
-		.map(
-			resource =>
-				(resource = {
-					name: resource
-						.getElementsByTagName("a")[0]
-						.textContent.trim(),
-					downloadOptions: getDownloadOptions(
-						sesskey,
-						resource.getElementsByTagName("a")[0].href
-					),
-					type: resource.getElementsByTagName("img")[0]["alt"].trim(),
-					section: resource
-						.getElementsByTagName("td")[0]
-						.textContent.trim()
-				})
-		)
-		.map((resource, index, array) => {
-			resource.section =
-				resource.section ||
-				(array[index - 1] && array[index - 1].section) ||
-				"";
-			return resource;
-		})
-		.filter(resource => SUPPORTED_FILES.has(resource.type));
-}
-
-function getFiles() {
-	const h1s = document.getElementsByTagName("h1");
-	const headerTitles = document.getElementsByClassName("header-title");
-	const breadcrumbItems = document.getElementsByClassName("breadcrumb-item");
-	const pageHeader = document.querySelector("header#page-header .header-title")
-	const courseName = (
-			h1s.length && h1s[0].innerText ||
-			headerTitles.length && headerTitles[0].innerText ||
-			pageHeader.textContent ||
-			breadcrumbItems.length > 2 && breadcrumbItems[2].firstElementChild.title ||
-			""
-		).trim();
-
-	const sesskey = new URL(
-		document.querySelector("a[href*='login/logout.php']").href
-	).searchParams.get("sesskey");
-
-	const tableBody = document.querySelector(
-		"div[role='main'] > table.generaltable.mod_index > tbody"
-	);
-	const allFiles =
-		tableBody === null
-			? getFilesUnderSection(sesskey)
-			: getFilesUnderResources(sesskey, tableBody);
-	allFiles.forEach(file => (file.course = courseName));
-	return allFiles;
 }
 
 document.addEventListener("DOMContentLoaded", () => {
