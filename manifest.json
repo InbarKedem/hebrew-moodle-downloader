@@ -1,5 +1,6 @@
 {
   "manifest_version": 3,
+
   "name": "Moodle Downloader",
   "description": "A chrome extension for downloading Moodle resources",
   "version": "1.6.0",
@@ -18,6 +19,13 @@
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"
   },
-  "permissions": ["activeTab", "downloads", "storage", "scripting"],
-  "host_permissions": ["<all_urls>"]
+  "permissions": [
+    "activeTab",
+    "downloads",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ]
 }
